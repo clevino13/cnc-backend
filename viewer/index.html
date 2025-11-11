@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>NGO Reports Viewer</title>
+  <style>
+    body { font-family: Arial; background:#f9f9f9; padding:20px; }
+    h2 { text-align:center; color:#2d7a2d; }
+    .card { background:white; border-radius:8px; padding:12px; margin:10px 0; box-shadow:0 1px 4px rgba(0,0,0,0.1); display:flex; gap:10px; align-items:center; }
+    img { width:120px; height:80px; object-fit:cover; border-radius:6px; }
+    .meta { flex:1; }
+    button { background:#2d7a2d; color:white; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; }
+  </style>
+</head>
+<body>
+  <h2>NGO Reports Viewer</h2>
+  <button onclick="loadReports()">🔄 Refresh</button>
+  <div id="list"></div>
+
+  <script>
+    async function loadReports() {
+      document.getElementById('list').innerHTML = '<p>Loading...</p>';
+      try {
+        const res = await fetch('/reports');
+        const reports = await res.json();
+        const list = document.getElementById('list');
+        list.innerHTML = '';
+        reports.forEach(r => {
+          const div = document.createElement('div');
+          div.className = 'card';
+          div.innerHTML = `
+            <img src="${r.imageUrl}" />
+            <div class="meta">
+              <p><b>Latitude:</b> ${r.latitude}</p>
+              <p><b>Longitude:</b> ${r.longitude}</p>
+              <a href="https://www.google.com/maps?q=${r.latitude},${r.longitude}" target="_blank">Open in Maps</a>
+            </div>
+          `;
+          list.appendChild(div);
+        });
+      } catch (err) {
+        document.getElementById('list').innerHTML = '<p>Error loading reports.</p>';
+      }
+    }
+
+    loadReports();
+  </script>
+</body>
+</html>
