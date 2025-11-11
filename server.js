@@ -11,8 +11,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ✅ Initialize Firebase Admin for Firestore
-const serviceAccount = require("./serviceAccountKey.json");
+// ✅ Load Firebase credentials from environment variable instead of file
+const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
