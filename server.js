@@ -11,7 +11,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ✅ Load Firebase credentials from JSON file (not from .env)
 const serviceAccount = require("./serviceAccountKey.json");
 
 admin.initializeApp({
