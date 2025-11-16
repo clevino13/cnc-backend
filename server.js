@@ -11,8 +11,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ✅ Load Firebase credentials from environment variable instead of file
-const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
+// ✅ Load Firebase credentials from JSON file (not from .env)
+const serviceAccount = require("./serviceAccountKey.json");
+
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
@@ -75,6 +76,41 @@ app.get("/reports", async (req, res) => {
     res.status(500).json({ error: "Fetch failed" });
   }
 });
+
+// 🗑️ DELETE /report/:id → delete from Firestore + Cloudinary
+app.delete("/report/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // 1️⃣ Get document from Firestore
+    const docRef = db.collection("reports").doc(id);
+    const docSnap = await docRef.get();
+    if (!docSnap.exists) {
+      return res.status(404).json({ error: "Report not found" });
+    }
+
+    const report = docSnap.data();
+    const imageUrl = report.imageUrl;
+
+    // 2️⃣ Extract Cloudinary public_id from the URL
+    // Example: https://res.cloudinary.com/demo/image/upload/v123/reports/abcxyz.jpg
+    const parts = imageUrl.split("/");
+    const publicIdWithExt = parts.slice(parts.indexOf("upload") + 2).join("/"); // e.g. reports/abcxyz.jpg
+    const publicId = publicIdWithExt.replace(/\.[^/.]+$/, ""); // remove .jpg/.png extension
+
+    // 3️⃣ Delete from Cloudinary
+    await cloudinary.uploader.destroy(publicId);
+
+    // 4️⃣ Delete from Firestore
+    await docRef.delete();
+
+    res.json({ success: true, message: "Image deleted successfully" });
+  } catch (err) {
+    console.error("Delete error:", err);
+    res.status(500).json({ error: "Failed to delete report" });
+  }
+});
+
 
 // ✅ Serve NGO viewer
 app.use("/viewer", express.static(path.join(__dirname, "viewer")));
