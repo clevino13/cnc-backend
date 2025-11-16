@@ -11,11 +11,20 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const serviceAccount = require("./serviceAccountKey.json");
+let serviceAccount;
+
+if (process.env.FIREBASE_CONFIG) {
+  // ✅ Render will use this path (environment variable)
+  serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
+} else {
+  // ✅ Local development uses the file
+  serviceAccount = require("./serviceAccountKey.json");
+}
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
+
 const db = admin.firestore();
 
 // ✅ Configure Cloudinary (reads from .env)
