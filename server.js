@@ -13,11 +13,10 @@ app.use(express.json());
 
 let serviceAccount;
 
+// ✅ Use FIREBASE_CONFIG on Render, file locally
 if (process.env.FIREBASE_CONFIG) {
-  // ✅ Render will use this path (environment variable)
   serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
 } else {
-  // ✅ Local development uses the file
   serviceAccount = require("./serviceAccountKey.json");
 }
 
@@ -27,38 +26,43 @@ admin.initializeApp({
 
 const db = admin.firestore();
 
-// ✅ Configure Cloudinary (reads from .env)
+// ✅ Cloudinary from .env
 cloudinary.config({
   cloud_name: process.env.CLOUD_NAME,
   api_key: process.env.CLOUD_API_KEY,
   api_secret: process.env.CLOUD_API_SECRET,
 });
 
-// ✅ Multer setup (for file uploads)
+// ✅ Multer for file uploads (memory storage)
 const upload = multer({ storage: multer.memoryStorage() });
 
-// ✅ POST /report → upload image to Cloudinary + save to Firestore
+// ✅ POST /report → upload image + save to Firestore
 app.post("/report", upload.single("image"), async (req, res) => {
   try {
-    const { latitude, longitude } = req.body;
-    if (!req.file) return res.status(400).json({ error: "Image required" });
-    if (!latitude || !longitude)
-      return res.status(400).json({ error: "Location required" });
+    const { latitude, longitude, description } = req.body;
 
-    // Upload image to Cloudinary
+    if (!req.file) {
+      return res.status(400).json({ error: "Image required" });
+    }
+    if (!latitude || !longitude) {
+      return res.status(400).json({ error: "Location required" });
+    }
+
     const uploadStream = cloudinary.uploader.upload_stream(
       { folder: "reports" },
       async (error, result) => {
         if (error) {
           console.error("Cloudinary upload failed:", error);
-          return res.status(500).json({ error: "Cloudinary upload failed" });
+          return res
+            .status(500)
+            .json({ error: "Cloudinary upload failed" });
         }
 
-        // Save info to Firestore
         await db.collection("reports").add({
           imageUrl: result.secure_url,
           latitude: parseFloat(latitude),
           longitude: parseFloat(longitude),
+          description: description || "",
           timestamp: admin.firestore.FieldValue.serverTimestamp(),
         });
 
@@ -68,7 +72,7 @@ app.post("/report", upload.single("image"), async (req, res) => {
 
     uploadStream.end(req.file.buffer);
   } catch (err) {
-    console.error(err);
+    console.error("Server error in /report:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
@@ -76,11 +80,17 @@ app.post("/report", upload.single("image"), async (req, res) => {
 // ✅ GET /reports → list all reports
 app.get("/reports", async (req, res) => {
   try {
-    const snap = await db.collection("reports").orderBy("timestamp", "desc").get();
-    const reports = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    const snap = await db
+      .collection("reports")
+      .orderBy("timestamp", "desc")
+      .get();
+    const reports = snap.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
     res.json(reports);
   } catch (err) {
-    console.error(err);
+    console.error("Fetch failed:", err);
     res.status(500).json({ error: "Fetch failed" });
   }
 });
@@ -90,9 +100,9 @@ app.delete("/report/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
-    // 1️⃣ Get document from Firestore
     const docRef = db.collection("reports").doc(id);
     const docSnap = await docRef.get();
+
     if (!docSnap.exists) {
       return res.status(404).json({ error: "Report not found" });
     }
@@ -100,16 +110,15 @@ app.delete("/report/:id", async (req, res) => {
     const report = docSnap.data();
     const imageUrl = report.imageUrl;
 
-    // 2️⃣ Extract Cloudinary public_id from the URL
-    // Example: https://res.cloudinary.com/demo/image/upload/v123/reports/abcxyz.jpg
+    // Extract Cloudinary public_id from URL
     const parts = imageUrl.split("/");
-    const publicIdWithExt = parts.slice(parts.indexOf("upload") + 2).join("/"); // e.g. reports/abcxyz.jpg
-    const publicId = publicIdWithExt.replace(/\.[^/.]+$/, ""); // remove .jpg/.png extension
+    const publicIdWithExt = parts.slice(parts.indexOf("upload") + 2).join("/");
+    const publicId = publicIdWithExt.replace(/\.[^/.]+$/, "");
 
-    // 3️⃣ Delete from Cloudinary
+    // Delete from Cloudinary
     await cloudinary.uploader.destroy(publicId);
 
-    // 4️⃣ Delete from Firestore
+    // Delete from Firestore
     await docRef.delete();
 
     res.json({ success: true, message: "Image deleted successfully" });
@@ -119,13 +128,16 @@ app.delete("/report/:id", async (req, res) => {
   }
 });
 
-
-// ✅ Serve NGO viewer
+// ✅ Serve NGO viewer (static HTML)
 app.use("/viewer", express.static(path.join(__dirname, "viewer")));
 
 // ✅ Root route
-app.get("/", (req, res) => res.send("✅ Backend running with Cloudinary + Firestore"));
+app.get("/", (req, res) => {
+  res.send("✅ Backend running with Cloudinary + Firestore");
+});
 
 // ✅ Start server
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`✅ Backend running on port ${PORT}`));
+app.listen(PORT, () =>
+  console.log(`✅ Backend running on port ${PORT}`)
+);
